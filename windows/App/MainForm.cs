@@ -16,27 +16,32 @@ namespace A1401
         // so the nav can't drift from the page. Untranslated steps fall back to the English wording.
         static readonly string[] Steps = { "Introduction", "Check this PC", "Build the Mac setup", "Your BIOS steps", "Create the macOS stick", "Done" };
         int page;
+        readonly Panel head = new Panel(), nav = new Panel(), foot = new Panel();
+        readonly Label brand = new Label(), sub = new Label();
+        readonly Button settingsBtn = new Button();
         readonly Label[] side = new Label[Steps.Length];
         readonly Panel body = new Panel();
+        readonly Panel[] stepPanels = new Panel[Steps.Length];
+        readonly float dpiScale = 1f;
         readonly Label title = new Label(), note = new Label();
         readonly Button back = new Button(), next = new Button();
         readonly TextBox log = new TextBox();
-        readonly ProgressBar bar = new ProgressBar();
-        readonly ComboBox disks = new ComboBox();
+        readonly M3ProgressBar bar = new M3ProgressBar();
+        readonly M3ComboBox disks = new M3ComboBox { Tag = "on-card" };
         // The macOS the user picks: index 0 = macOS 15 Sequoia (Darwin 24), 1 = macOS 26 Tahoe (Darwin 25).
-        readonly ComboBox osPick = new ComboBox();
+        readonly M3ComboBox osPick = new M3ComboBox { Tag = "on-card" };
         // Off unless the user ticks it: the community AMD RDNA 4 display driver and the MediaTek Wi-Fi driver are
         // unproven on most of the hardware they claim, and each takes over something the machine needs to be usable.
         readonly CheckBox expDrivers = new CheckBox();
         readonly Button refresh = new Button();
         readonly WebBrowser guide = new WebBrowser();
-        readonly LinkLabel ocLink = new LinkLabel();
-        readonly LinkLabel logLink = new LinkLabel(), coffeeLink = new LinkLabel();
-        readonly LinkLabel drvLink = new LinkLabel();
-        readonly LinkLabel appLink = new LinkLabel();
-        readonly LinkLabel doctorLink = new LinkLabel();
-        readonly LinkLabel firmwareLink = new LinkLabel();
-        readonly ListView facts = new ListView();
+        readonly M3LinkLabel ocLink = new M3LinkLabel { IconGlyph = "book" };
+        readonly M3LinkLabel logLink = new M3LinkLabel { IconGlyph = "upload" }, coffeeLink = new M3LinkLabel { IconGlyph = "heart" };
+        readonly M3LinkLabel drvLink = new M3LinkLabel { IconGlyph = "gpu" };
+        readonly M3LinkLabel appLink = new M3LinkLabel { IconGlyph = "update" };
+        readonly M3LinkLabel doctorLink = new M3LinkLabel { IconGlyph = "stethoscope" };
+        readonly M3LinkLabel firmwareLink = new M3LinkLabel { IsChip = true, IconGlyph = "chip" };
+        readonly M3ListView facts = new M3ListView();
         bool busy, scanned, built, written, listing, showingPrerequisites;
         // The newest 1401 when this one is older (startup check), else null. 10-12: 61% of a day's 170 failed writes came
         // from versions whose bugs were already fixed (1.1.0 alone: 59), so an old 1401 updates before it builds anything.
@@ -54,6 +59,7 @@ namespace A1401
             // point-sized fonts grew with the display while the boxes kept their 96-DPI size, so text was cut off.
             // Scale the whole layout with the display, as the Windows Forms designer does for its own forms.
             SuspendLayout();
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
             AutoScaleDimensions = new SizeF(96F, 96F); AutoScaleMode = AutoScaleMode.Dpi;
             Text = Loc.T("1401 Assistant");
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
@@ -64,85 +70,291 @@ namespace A1401
             if (!verificationMode) Shown += (o, e) => OfferStickLogs(false);
             if (!verificationMode) Shown += (o, e) => CheckAppVersion();
 
-            var head = new Panel { Dock = DockStyle.Top, Height = 74, BackColor = Theme.Panel };
-            var mark = new PictureBox { Image = Theme.Mark(), SizeMode = PictureBoxSizeMode.Zoom, Bounds = new Rectangle(14, 9, 56, 56) };
-            var brand = new Label { Text = "NullMoth", Font = Theme.Brand, ForeColor = Theme.Purple, AutoSize = true, Location = new Point(80, 8) };
-            var sub = new Label { Text = Loc.T("1401 Assistant  -  macOS on the PC you already own"), Font = Theme.Mono, ForeColor = Theme.Cyan, AutoSize = true, Location = new Point(84, 46) };
-            head.Controls.AddRange(new Control[] { mark, brand, sub });
+            head.Bounds = new Rectangle(0, 0, 900, 74);
+            head.Dock = DockStyle.Top; head.Height = 74; head.BackColor = Theme.Panel;
+            Theme.EnableDoubleBuffering(head);
+            var mark = new PictureBox { Image = Theme.Mark(), SizeMode = PictureBoxSizeMode.Zoom, Bounds = new Rectangle(18, 13, 48, 48), BackColor = Color.Transparent };
+            brand.Text = "NullMoth"; brand.Font = Theme.Brand; brand.ForeColor = Theme.Purple; brand.BackColor = Color.Transparent; brand.AutoSize = true; brand.Location = new Point(78, 11);
+            sub.Text = Loc.T("1401 Assistant  -  macOS on the PC you already own"); sub.Font = Theme.Mono; sub.ForeColor = Theme.Cyan; sub.BackColor = Color.Transparent; sub.AutoSize = true; sub.Location = new Point(80, 44);
+            settingsBtn.Name = "settingsBtn"; settingsBtn.Text = Loc.T("Settings"); settingsBtn.Tag = "m3-settings"; settingsBtn.Bounds = new Rectangle(762, 19, 122, 36);
+            settingsBtn.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            Theme.Style(settingsBtn, false);
+            settingsBtn.Click += (s, e) => Theme.ShowSettingsDialog(this);
+            head.Paint += PaintHeader;
+            head.Controls.AddRange(new Control[] { mark, brand, sub, settingsBtn });
 
-            var nav = new Panel { Dock = DockStyle.Left, Width = 220, BackColor = Theme.Panel2, Padding = new Padding(12, 16, 8, 8) };
+            nav.Dock = DockStyle.Left; nav.Width = 220; nav.BackColor = Theme.Panel2; nav.Padding = new Padding(10, 14, 10, 8);
+            Theme.EnableDoubleBuffering(nav);
             for (int i = Steps.Length - 1; i >= 0; i--)
             {
-                side[i] = new Label { Text = (i + 1) + ".  " + Loc.T(Steps[i]), Dock = DockStyle.Top, Height = 34, Font = Theme.Body, ForeColor = Theme.Muted };
+                side[i] = new Label { Text = (i + 1) + ".  " + Loc.T(Steps[i]), Dock = DockStyle.Top, Height = 42, Font = Theme.Body, ForeColor = Theme.Muted, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(10, 0, 8, 0) };
+                Theme.StyleNavStep(side[i], i, () => page);
                 nav.Controls.Add(side[i]);
             }
+            nav.Paint += PaintNav;
 
-            var foot = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = Theme.Panel };
-            back.Text = Loc.T("< Back"); back.Bounds = new Rectangle(560, 12, 150, 32); Theme.Style(back, false);
-            next.Text = Loc.T("Continue >"); next.Bounds = new Rectangle(720, 12, 160, 32); Theme.Style(next);
+            foot.Bounds = new Rectangle(0, 564, 900, 56);
+            foot.Dock = DockStyle.Bottom; foot.Height = 56; foot.BackColor = Theme.Panel;
+            Theme.EnableDoubleBuffering(foot);
+            back.Text = Loc.T("< Back"); back.Bounds = new Rectangle(552, 10, 152, 36); Theme.Style(back, false);
+            next.Text = Loc.T("Continue >"); next.Bounds = new Rectangle(716, 10, 168, 36); Theme.Style(next);
             back.Click += (s, e) => {
                 if (page == 3 && showingPrerequisites) { showingPrerequisites = false; Go(prerequisiteReturnPage); }
                 else Go(page - 1);
             }; next.Click += (s, e) => OnNext();
+            foot.Paint += PaintFooter;
             foot.Controls.AddRange(new Control[] { back, next });
 
-            body.Dock = DockStyle.Fill; body.Padding = new Padding(24, 18, 24, 12); body.BackColor = Theme.Bg;
-            title.Font = Theme.Title; title.ForeColor = Theme.Text; title.AutoSize = false; title.Bounds = new Rectangle(24, 14, 620, 40);
-            note.AutoSize = false; note.Bounds = new Rectangle(24, 58, 620, 96); note.ForeColor = Theme.Text;
-            log.Multiline = true; log.ReadOnly = true; log.ScrollBars = ScrollBars.Vertical; log.BackColor = Color.Black;
-            log.ForeColor = Theme.Cyan; log.Font = Theme.Log; log.BorderStyle = BorderStyle.FixedSingle;
-            log.Bounds = new Rectangle(24, 330, 620, 140);
-            bar.Bounds = new Rectangle(24, 300, 620, 18);
+            body.Dock = DockStyle.Fill; body.Padding = Padding.Empty; body.BackColor = Theme.Bg;
+            Theme.EnableDoubleBuffering(body);
+            for (int i = 0; i < Steps.Length; i++)
+            {
+                int stepIdx = i;
+                stepPanels[i] = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Bg, Visible = (i == 0) };
+                Theme.EnableDoubleBuffering(stepPanels[i]);
+                stepPanels[i].Paint += (s, e) => PaintStepCards(stepIdx, e.Graphics);
+                body.Controls.Add(stepPanels[i]);
+            }
+            title.Font = Theme.Title; title.ForeColor = Theme.Text; title.BackColor = Color.Transparent; title.AutoSize = false; title.Bounds = new Rectangle(20, 12, 640, 32); title.UseMnemonic = false;
+            note.AutoSize = false; note.Bounds = new Rectangle(32, 56, 620, 184); note.ForeColor = Theme.Text; note.BackColor = Theme.CardBg; note.UseMnemonic = false;
+            log.Multiline = true; log.ReadOnly = true; log.ScrollBars = ScrollBars.Vertical; log.BackColor = Theme.CardBg;
+            log.ForeColor = Theme.Cyan; log.Font = Theme.Log; log.BorderStyle = BorderStyle.None;
+            log.Bounds = new Rectangle(24, 322, 632, 148);
+            bar.Bounds = new Rectangle(16, 296, 648, 12);
             facts.View = View.Details; facts.FullRowSelect = true; facts.HeaderStyle = ColumnHeaderStyle.Nonclickable;
-            facts.BackColor = Theme.Panel; facts.ForeColor = Theme.Text; facts.Font = Theme.Fact;
-            facts.Columns.Add("", 170); facts.Columns.Add("", 440); facts.Bounds = new Rectangle(24, 156, 620, 136);
-            disks.DropDownStyle = ComboBoxStyle.DropDownList; disks.Bounds = new Rectangle(24, 170, 500, 28);
-            disks.BackColor = Theme.Panel; disks.ForeColor = Theme.Text; disks.Font = Theme.Picker;
-            refresh.Text = Loc.T("Refresh"); refresh.Bounds = new Rectangle(534, 168, 110, 30); Theme.Style(refresh, false);
+            facts.BackColor = Theme.CardBg; facts.ForeColor = Theme.Text; facts.Font = Theme.Fact;
+            facts.Columns.Add(Loc.T("Component"), 176); facts.Columns.Add(Loc.T("Detected Hardware"), 448);
+            facts.Bounds = new Rectangle(22, 112, 636, 144);
+            Theme.StyleListView(facts);
+            disks.DropDownStyle = ComboBoxStyle.DropDownList; disks.Bounds = new Rectangle(26, 130, 504, 28);
+            disks.BackColor = Theme.SurfaceContainerHigh; disks.ForeColor = Theme.Text; disks.Font = Theme.Picker;
+            Theme.StyleComboBox(disks);
+            refresh.Name = "refreshBtn"; refresh.Text = Loc.T("Refresh"); refresh.Tag = "m3-refresh"; refresh.AccessibleDescription = "on-card"; refresh.Bounds = new Rectangle(540, 128, 114, 32); Theme.Style(refresh, false);
             refresh.Click += (s, e) => FillDisks();
-            osPick.DropDownStyle = ComboBoxStyle.DropDownList; osPick.Bounds = new Rectangle(24, 300, 300, 28);
-            osPick.BackColor = Theme.Panel; osPick.ForeColor = Theme.Text; osPick.Font = Theme.Picker;
+            osPick.DropDownStyle = ComboBoxStyle.DropDownList; osPick.Bounds = new Rectangle(28, 240, 260, 28);
+            osPick.BackColor = Theme.SurfaceContainerHigh; osPick.ForeColor = Theme.Text; osPick.Font = Theme.Picker;
             osPick.Items.AddRange(new object[] { Loc.T("macOS 15 Sequoia"), Loc.T("macOS 26 Tahoe") }); osPick.SelectedIndex = 0;
+            Theme.StyleComboBox(osPick);
             // A different pick needs different startup files: drop the finished build so Build runs again.
             osPick.SelectedIndexChanged += (s, e) => { if (built && !busy) { built = false; summary = ""; Go(2); } };
-            expDrivers.Text = Loc.T("Include experimental drivers (AMD RDNA 4 graphics, MediaTek Wi-Fi)");
-            expDrivers.Bounds = new Rectangle(24, 334, 620, 24); expDrivers.Checked = false;
-            expDrivers.BackColor = Theme.Panel; expDrivers.ForeColor = Theme.Text; expDrivers.Font = Theme.Picker;
+            expDrivers.Text = Loc.T("Include experimental drivers (AMD RDNA 4 graphics, MediaTek Wi-Fi)"); expDrivers.Tag = "on-card";
+            expDrivers.Bounds = new Rectangle(28, 274, 620, 28); expDrivers.Checked = false;
+            expDrivers.BackColor = Theme.CardBg; expDrivers.ForeColor = Theme.Text; expDrivers.Font = Theme.Picker;
+            Theme.StyleCheckBox(expDrivers);
             // Including them changes which kexts the build carries, so a finished build is no longer the right one.
             expDrivers.CheckedChanged += (s, e) => { if (built && !busy) { built = false; summary = ""; Go(2); } };
-            guide.Bounds = new Rectangle(24, 110, 620, 360); guide.ScriptErrorsSuppressed = true;
-            ocLink.Text = Loc.T("OpenCore Install Guide (dortania.github.io/OpenCore-Install-Guide)"); ocLink.AutoSize = true;
-            ocLink.Location = new Point(24, 300); ocLink.LinkColor = Theme.Cyan; ocLink.Font = Theme.Link;
+            guide.Bounds = new Rectangle(22, 110, 636, 362); guide.ScriptErrorsSuppressed = true;
+            guide.DocumentCompleted += (s, e) => SyncGuideTheme();
+            ocLink.Text = Loc.T("OpenCore Install Guide (dortania.github.io/OpenCore-Install-Guide)"); ocLink.AutoSize = false;
+            ocLink.Bounds = new Rectangle(16, 256, 648, 33); ocLink.LinkColor = Theme.Purple; ocLink.ActiveLinkColor = Theme.Cyan; ocLink.Font = Theme.Link;
             ocLink.LinkClicked += (s, e) => System.Diagnostics.Process.Start("https://dortania.github.io/OpenCore-Install-Guide/");
-            logLink.Text = Loc.T("Something went wrong? Scan for logs and send them"); logLink.AutoSize = true;
-            logLink.Location = new Point(24, 330); logLink.LinkColor = Theme.Cyan; logLink.Font = Theme.Link;
+            logLink.Text = Loc.T("Something went wrong? Scan for logs and send them"); logLink.AutoSize = false;
+            logLink.Bounds = new Rectangle(16, 293, 648, 33); logLink.LinkColor = Theme.Purple; logLink.ActiveLinkColor = Theme.Cyan; logLink.Font = Theme.Link;
             logLink.LinkClicked += (s, e) => OfferStickLogs(true);
-            coffeeLink.Text = Loc.T("Buy me a coffee"); coffeeLink.AutoSize = true;
-            coffeeLink.Location = new Point(440, 330); coffeeLink.LinkColor = Theme.Cyan; coffeeLink.Font = Theme.Link;
-            coffeeLink.LinkClicked += (s, e) => System.Diagnostics.Process.Start("https://buymeacoffee.com/nullmoth");
-            drvLink.Text = Loc.T("Update the NVIDIA driver (newest release, here and on your 1401 stick)"); drvLink.AutoSize = true;
-            drvLink.Location = new Point(24, 355); drvLink.LinkColor = Theme.Cyan; drvLink.Font = Theme.Link;
+            drvLink.Text = Loc.T("Update the NVIDIA driver (newest release, here and on your 1401 stick)"); drvLink.AutoSize = false;
+            drvLink.Bounds = new Rectangle(16, 330, 648, 33); drvLink.LinkColor = Theme.Purple; drvLink.ActiveLinkColor = Theme.Cyan; drvLink.Font = Theme.Link;
             drvLink.LinkClicked += (s, e) => UpdateDriver();
-            appLink.Text = Loc.T("Update 1401 (this app)"); appLink.AutoSize = true;
-            appLink.Location = new Point(440, 355); appLink.LinkColor = Theme.Cyan; appLink.Font = Theme.Link;
-            appLink.LinkClicked += (s, e) => UpdateApp();
-            doctorLink.Text = Loc.T("Built your own EFI? Check it (and fix it) with the same rules 1401 uses"); doctorLink.AutoSize = true;
-            doctorLink.Location = new Point(24, 380); doctorLink.LinkColor = Theme.Cyan; doctorLink.Font = Theme.Link;
+            doctorLink.Text = Loc.T("Built your own EFI? Check it (and fix it) with the same rules 1401 uses"); doctorLink.AutoSize = false;
+            doctorLink.Bounds = new Rectangle(16, 367, 648, 33); doctorLink.LinkColor = Theme.Purple; doctorLink.ActiveLinkColor = Theme.Cyan; doctorLink.Font = Theme.Link;
             doctorLink.LinkClicked += (s, e) => CheckOwnEfi();
-            firmwareLink.Text = Loc.T("Review firmware prerequisites"); firmwareLink.AutoSize = true;
-            firmwareLink.Location = new Point(24, 300); firmwareLink.LinkColor = Theme.Cyan; firmwareLink.Font = Theme.Link;
+            appLink.Text = Loc.T("Update 1401 (this app)"); appLink.AutoSize = false;
+            appLink.Bounds = new Rectangle(16, 404, 648, 33); appLink.LinkColor = Theme.Purple; appLink.ActiveLinkColor = Theme.Cyan; appLink.Font = Theme.Link;
+            appLink.LinkClicked += (s, e) => UpdateApp();
+            coffeeLink.Text = Loc.T("Buy me a coffee"); coffeeLink.AutoSize = false;
+            coffeeLink.Bounds = new Rectangle(16, 441, 648, 33); coffeeLink.LinkColor = Theme.Purple; coffeeLink.ActiveLinkColor = Theme.Cyan; coffeeLink.Font = Theme.Link;
+            coffeeLink.LinkClicked += (s, e) => System.Diagnostics.Process.Start("https://buymeacoffee.com/nullmoth");
+            firmwareLink.Text = Loc.T("Review firmware prerequisites"); firmwareLink.AutoSize = false;
+            firmwareLink.Bounds = new Rectangle(16, 266, 280, 26); firmwareLink.LinkColor = Theme.Purple; firmwareLink.ActiveLinkColor = Theme.Cyan; firmwareLink.Font = Theme.Link;
             firmwareLink.LinkClicked += (s, e) => {
                 if (busy || firmwareGuideFile == null || !File.Exists(firmwareGuideFile)) return;
                 prerequisiteReturnPage = page; showingPrerequisites = true; Go(3);
             };
-            body.Controls.AddRange(new Control[] { title, note, facts, bar, log, disks, refresh, osPick, expDrivers, guide, ocLink, logLink, coffeeLink, drvLink, appLink, doctorLink, firmwareLink });
+            stepPanels[0].Controls.AddRange(new Control[] { title, note, ocLink, logLink, drvLink, doctorLink, appLink, coffeeLink });
+            stepPanels[1].Controls.AddRange(new Control[] { facts, firmwareLink, bar, log });
+            stepPanels[2].Controls.AddRange(new Control[] { osPick, expDrivers });
+            stepPanels[3].Controls.Add(guide);
+            stepPanels[4].Controls.AddRange(new Control[] { disks, refresh });
 
             Controls.Add(body); Controls.Add(nav); Controls.Add(foot); Controls.Add(head);
             ResumeLayout(false); PerformLayout();
-            // List view columns are not part of autoscaling.
+            // List view columns and per-step layouts scale with the display DPI.
             float k = CurrentAutoScaleDimensions.Width / 96F;
+            dpiScale = k > 0.5F ? k : 1F;
             if (k > 1.01F) foreach (ColumnHeader c in facts.Columns) c.Width = (int)(c.Width * k);
+            Theme.Changed += ApplyTheme;
+            FormClosed += (s, e) => Theme.Changed -= ApplyTheme;
             Go(0);
+        }
+
+        int S(int v) { return (int)Math.Round(v * dpiScale); }
+        Rectangle Box(int x, int y, int w, int h) { return new Rectangle(S(x), S(y), S(w), S(h)); }
+        Point Pt(int x, int y) { return new Point(S(x), S(y)); }
+
+        void PaintHeader(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            // M3 rounded icon badge surface behind the brand logo
+            var logoCard = Box(13, 8, 58, 58);
+            Theme.FillRounded(g, Theme.SurfaceContainerHigh, logoCard, S(16));
+            Theme.DrawRounded(g, Theme.OutlineVariant, logoCard, S(16), 1f);
+
+            // Subtle M3 pill badge next to brand title
+            int badgeX = brand.Right + S(10);
+            int badgeY = S(15);
+            var badgeRect = new Rectangle(badgeX, badgeY, S(54), S(20));
+            Theme.FillRounded(g, Theme.PrimaryContainer, badgeRect, S(10));
+            TextRenderer.DrawText(g, "M3 UI", Theme.BadgeFont, badgeRect, Theme.OnPrimaryContainer,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+
+            using (var pen = new Pen(Theme.OutlineVariant, 1f))
+                g.DrawLine(pen, 0, head.Height - 1, head.Width, head.Height - 1);
+        }
+
+        void PaintNav(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            // Bottom M3 status card inside the FlClash navigation drawer
+            int cardH = S(68);
+            int cardY = nav.Height - cardH - S(14);
+            if (cardY > S(270))
+            {
+                var card = new Rectangle(S(12), cardY, nav.Width - S(24), cardH);
+                Theme.FillRounded(g, Theme.SurfaceContainerHigh, card, S(14));
+                Theme.DrawRounded(g, Theme.OutlineVariant, card, S(14), 1f);
+
+                // Progress indicator dot + step progress text
+                var dotRect = new Rectangle(card.X + S(14), card.Y + S(14), S(8), S(8));
+                using (var br = new SolidBrush(Theme.Primary))
+                    g.FillEllipse(br, dotRect);
+
+                var stepText = Loc.F("Step {0} of {1}", page + 1, Steps.Length);
+                TextRenderer.DrawText(g, stepText, Theme.BodyBold,
+                    new Rectangle(card.X + S(28), card.Y + S(9), card.Width - S(36), S(20)),
+                    Theme.Text, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+
+                // Mini M3 linear progress track inside the nav drawer card
+                var track = new Rectangle(card.X + S(14), card.Y + S(38), card.Width - S(28), S(6));
+                Theme.FillRounded(g, Theme.PrimaryContainer, track, S(3));
+                int fillW = Math.Max(S(10), (int)Math.Round(track.Width * ((page + 1) / (double)Steps.Length)));
+                Theme.FillRounded(g, Theme.Primary, new Rectangle(track.X, track.Y, fillW, track.Height), S(3));
+            }
+            using (var pen = new Pen(Theme.OutlineVariant, 1f))
+                g.DrawLine(pen, nav.Width - 1, 0, nav.Width - 1, nav.Height);
+        }
+
+        void PaintFooter(object sender, PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using (var pen = new Pen(Theme.OutlineVariant, 1f))
+                g.DrawLine(pen, 0, 0, foot.Width, 0);
+
+            // Left M3 tonal step pill chip in bottom bar
+            var chip = Box(18, 13, 180, 30);
+            Theme.FillRounded(g, Theme.SurfaceContainerHigh, chip, S(15));
+            Theme.DrawRounded(g, Theme.OutlineVariant, chip, S(15), 1f);
+            using (var br = new SolidBrush(Theme.Primary))
+                g.FillEllipse(br, chip.X + S(12), chip.Y + (chip.Height - S(8)) / 2, S(8), S(8));
+            TextRenderer.DrawText(g, Loc.F("Step {0} of {1}", page + 1, Steps.Length), Theme.ChipFont,
+                new Rectangle(chip.X + S(26), chip.Y, chip.Width - S(34), chip.Height),
+                Theme.Muted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+
+        void PaintStepCards(int p, Graphics g)
+        {
+            int r = S(14);
+            switch (p)
+            {
+                case 0:
+                    Theme.DrawCard(g, Box(16, 48, 648, 200), r, true);
+                    break;
+                case 1:
+                    Theme.DrawCard(g, Box(16, 48, 648, 52), r, true);
+                    Theme.DrawCard(g, Box(16, 106, 648, 156), r, false);
+                    Theme.DrawCard(g, Box(16, 314, 648, 164), r, false);
+                    break;
+                case 2:
+                    Theme.DrawCard(g, Box(16, 48, 648, 52), r, true);
+                    Theme.DrawCard(g, Box(16, 104, 648, 124), r, false);
+                    Theme.DrawCard(g, Box(16, 232, 648, 76), r, false);
+                    Theme.DrawCard(g, Box(16, 328, 648, 150), r, false);
+                    break;
+                case 3:
+                    Theme.DrawCard(g, Box(16, 48, 648, 50), r, true);
+                    Theme.DrawCard(g, Box(16, 104, 648, 374), r, false);
+                    break;
+                case 4:
+                    Theme.DrawCard(g, Box(16, 48, 648, 66), r, true);
+                    Theme.DrawCard(g, Box(16, 120, 648, 48), r, false);
+                    Theme.DrawCard(g, Box(16, 192, 648, 286), r, false);
+                    break;
+                case 5:
+                    Theme.DrawCard(g, Box(16, 48, 648, 280), r, true);
+                    break;
+            }
+        }
+
+        void LayoutStep(int p)
+        {
+            var host = stepPanels[p];
+            if (title.Parent != host) host.Controls.Add(title);
+            if (note.Parent != host) host.Controls.Add(note);
+            title.Bounds = Box(20, 12, 640, 32);
+            switch (p)
+            {
+                case 0:
+                    note.Bounds = Box(32, 56, 620, 184);
+                    ocLink.Bounds = Box(16, 256, 648, 33);
+                    logLink.Bounds = Box(16, 293, 648, 33);
+                    drvLink.Bounds = Box(16, 330, 648, 33);
+                    doctorLink.Bounds = Box(16, 367, 648, 33);
+                    appLink.Bounds = Box(16, 404, 648, 33);
+                    coffeeLink.Bounds = Box(16, 441, 648, 33);
+                    break;
+                case 1:
+                    if (facts.Parent != host) host.Controls.Add(facts);
+                    if (firmwareLink.Parent != host) host.Controls.Add(firmwareLink);
+                    if (bar.Parent != host) host.Controls.Add(bar);
+                    if (log.Parent != host) host.Controls.Add(log);
+                    note.Bounds = Box(32, 54, 620, 40);
+                    facts.Bounds = Box(22, 112, 636, 144);
+                    firmwareLink.Bounds = Box(16, 266, 280, 26);
+                    bar.Bounds = Box(16, 296, 648, 12);
+                    log.Bounds = Box(24, 322, 632, 148);
+                    break;
+                case 2:
+                    if (facts.Parent != host) host.Controls.Add(facts);
+                    if (firmwareLink.Parent != host) host.Controls.Add(firmwareLink);
+                    if (bar.Parent != host) host.Controls.Add(bar);
+                    if (log.Parent != host) host.Controls.Add(log);
+                    note.Bounds = Box(32, 54, 620, 40);
+                    facts.Bounds = Box(22, 110, 636, 112);
+                    osPick.Bounds = Box(28, 240, 260, 28);
+                    firmwareLink.Bounds = Box(300, 241, 280, 26);
+                    expDrivers.Bounds = Box(28, 274, 620, 28);
+                    bar.Bounds = Box(16, 312, 648, 12);
+                    log.Bounds = Box(24, 336, 632, 134);
+                    break;
+                case 3:
+                    note.Bounds = Box(32, 53, 620, 40);
+                    guide.Bounds = Box(22, 110, 636, 362);
+                    break;
+                case 4:
+                    if (bar.Parent != host) host.Controls.Add(bar);
+                    if (log.Parent != host) host.Controls.Add(log);
+                    note.Bounds = Box(32, 54, 620, 54);
+                    disks.Bounds = Box(26, 130, 504, 28);
+                    refresh.Bounds = Box(540, 128, 114, 32);
+                    bar.Bounds = Box(16, 174, 648, 12);
+                    log.Bounds = Box(24, 200, 632, 270);
+                    break;
+                case 5:
+                    note.Bounds = Box(32, 60, 620, 256);
+                    break;
+            }
+            host.Invalidate();
         }
 
         // "Update driver": the newest driver release and 1401 Mac app, verified against the release's SHA256SUMS.txt, into
@@ -180,13 +392,13 @@ namespace A1401
             busy = false; appLink.Enabled = true;
             string result = lines.LastOrDefault(l => l.StartsWith("RESULT ")) ?? "RESULT stop: the update check did not answer";
             if (result.StartsWith("RESULT uptodate"))
-            { MessageBox.Show(this, "1401 " + have + " is the newest version.", "1401 - Update"); return; }
+            { MessageBox.Show(this, Loc.F("1401 {0} is the newest version.", have), Loc.T("1401 - Update")); return; }
             if (rc != 0 || !result.StartsWith("RESULT ready "))
-            { MessageBox.Show(this, "1401 could not update itself:\r\n\r\n" + result.Substring(7), "1401 - Update"); return; }
+            { MessageBox.Show(this, Loc.T("1401 could not update itself:\r\n\r\n") + result.Substring(7), Loc.T("1401 - Update")); return; }
             var parts = result.Split(new[] { ' ' }, 4);
             string version = parts[2], src = parts[3], home = Engine.Home.TrimEnd('\\');
-            if (!File.Exists(Path.Combine(src, "1401.exe"))) { MessageBox.Show(this, "The downloaded 1401 has no 1401.exe; nothing was changed.", "1401 - Update"); return; }
-            if (MessageBox.Show(this, "1401 " + version + " is downloaded and checked. 1401 closes, updates itself and opens again.", "1401 - Update",
+            if (!File.Exists(Path.Combine(src, "1401.exe"))) { MessageBox.Show(this, Loc.T("The downloaded 1401 has no 1401.exe; nothing was changed."), Loc.T("1401 - Update")); return; }
+            if (MessageBox.Show(this, Loc.F("1401 {0} is downloaded and checked. 1401 closes, updates itself and opens again.", version), Loc.T("1401 - Update"),
                                 MessageBoxButtons.OKCancel) != DialogResult.OK) return;
             string backup = Path.Combine(work, "previous"), script = Path.Combine(work, "swap.cmd");
             // Only 1401's own files move: its top-level files are copied and its engine and NullMoth folders mirrored. A /MIR of
@@ -217,13 +429,14 @@ namespace A1401
         void Say(string s)
         {
             if (InvokeRequired) { BeginInvoke(new Action<string>(Say), s); return; }
-            if (s.StartsWith("PROGRESS ")) { int p; var parts = s.Split(' '); if (int.TryParse(parts[1], out p)) bar.Value = Math.Max(0, Math.Min(100, p)); return; }
+            if (s.StartsWith("PROGRESS ")) { int p; var parts = s.Split(' '); if (int.TryParse(parts[1], out p)) { if (!bar.Visible && (page == 1 || page == 2 || page == 4)) bar.Visible = true; bar.Value = Math.Max(0, Math.Min(100, p)); } return; }
             log.AppendText(s + Environment.NewLine);
         }
 
         void Show(params Control[] on)
         {
-            foreach (Control c in new Control[] { facts, bar, log, disks, refresh, guide, ocLink, logLink }) c.Visible = on.Contains(c);
+            for (int i = 0; i < stepPanels.Length; i++) stepPanels[i].Visible = (i == page);
+            foreach (Control c in new Control[] { facts, bar, log, disks, refresh, osPick, expDrivers, guide, ocLink, logLink }) c.Visible = on.Contains(c);
             drvLink.Visible = logLink.Visible;
             appLink.Visible = logLink.Visible;
             coffeeLink.Visible = logLink.Visible;
@@ -232,15 +445,92 @@ namespace A1401
             firmwareLink.Enabled = !busy;
         }
 
+        void SyncGuideTheme()
+        {
+            try
+            {
+                if (guide.Document != null)
+                {
+                    if (guide.Url == null || guide.Url.ToString() == "about:blank")
+                    {
+                        if (guide.Document.Body != null)
+                            guide.Document.Body.Style = "margin:0;background-color:" + ColorTranslator.ToHtml(Theme.CardBg) + ";color:" + ColorTranslator.ToHtml(Theme.Muted) + ";font-family:'Segoe UI',sans-serif;padding:24px;";
+                    }
+                    else
+                    {
+                        guide.Document.InvokeScript("setM3Theme", new object[] { Theme.CurrentScheme, Theme.IsDark, Theme.CustomSeedHex });
+                    }
+                }
+            }
+            catch (Exception) { }
+        }
+
+        void ApplyTheme()
+        {
+            BackColor = Theme.Bg; ForeColor = Theme.Text;
+            head.BackColor = Theme.Panel;
+            brand.ForeColor = Theme.Purple;
+            sub.ForeColor = Theme.Cyan;
+            Theme.Style(settingsBtn, false);
+            nav.BackColor = Theme.Panel2;
+            foot.BackColor = Theme.Panel;
+            Theme.Style(back, false);
+            Theme.Style(next, true);
+            Theme.Style(refresh, false);
+            body.BackColor = Theme.Bg;
+            for (int i = 0; i < stepPanels.Length; i++) stepPanels[i].BackColor = Theme.Bg;
+            title.ForeColor = Theme.Text;
+            note.BackColor = Theme.CardBg;
+            note.ForeColor = Theme.Text;
+            log.BackColor = Theme.CardBg;
+            log.ForeColor = Theme.Cyan;
+            facts.BackColor = Theme.CardBg;
+            facts.ForeColor = Theme.Text;
+            disks.BackColor = Theme.SurfaceContainerHigh;
+            disks.ForeColor = Theme.Text;
+            osPick.BackColor = Theme.SurfaceContainerHigh;
+            osPick.ForeColor = Theme.Text;
+            expDrivers.BackColor = Theme.CardBg;
+            expDrivers.ForeColor = Theme.Text;
+            foreach (var lnk in new[] { ocLink, logLink, drvLink, doctorLink, appLink, coffeeLink, firmwareLink })
+            {
+                lnk.LinkColor = Theme.Purple;
+                lnk.ActiveLinkColor = Theme.Cyan;
+                lnk.Invalidate();
+            }
+            for (int i = 0; i < Steps.Length; i++)
+            {
+                side[i].BackColor = Color.Transparent;
+                side[i].ForeColor = i == page ? Theme.OnPrimaryContainer : (i < page ? Theme.Cyan : Theme.Muted);
+                side[i].Font = i == page ? Theme.BodyBold : Theme.Body;
+                side[i].Invalidate();
+            }
+            bar.Invalidate();
+            facts.Invalidate();
+            disks.Invalidate();
+            osPick.Invalidate();
+            expDrivers.Invalidate();
+            head.Invalidate();
+            nav.Invalidate();
+            foot.Invalidate();
+            SyncGuideTheme();
+            Invalidate(true);
+        }
+
         void Go(int p)
         {
             if (busy || p < 0 || p >= Steps.Length) return;
             page = p;
+            LayoutStep(page);
             for (int i = 0; i < Steps.Length; i++)
             {
-                side[i].ForeColor = i == page ? Theme.Purple : (i < page ? Theme.Cyan : Theme.Muted);
-                side[i].Font = i == page ? new Font(Theme.Face("Verdana"), 9.75f, FontStyle.Bold) : Theme.Body;
+                side[i].BackColor = Color.Transparent;
+                side[i].ForeColor = i == page ? Theme.OnPrimaryContainer : (i < page ? Theme.Cyan : Theme.Muted);
+                side[i].Font = i == page ? Theme.BodyBold : Theme.Body;
+                side[i].Invalidate();
             }
+            nav.Invalidate();
+            foot.Invalidate();
             title.Text = Loc.T(Steps[page]); back.Enabled = page > 0 && page < Steps.Length - 1; next.Text = Loc.T("Continue >");
             switch (page)
             {
@@ -268,12 +558,16 @@ namespace A1401
                         note.Text = Loc.T("Review storage requirements before building. No EFI or firmware changes are made by this page. Return to the check or build when finished.");
                         Show(guide); next.Enabled = true; next.Text = Loc.T("Return >");
                         if (firmwareGuideFile != null && File.Exists(firmwareGuideFile)) guide.Navigate(firmwareGuideFile);
+                        else if (guide.Document == null) guide.Navigate("about:blank");
+                        else SyncGuideTheme();
                     }
                     else
                     {
                         note.Text = Loc.T("These BIOS suggestions follow your scan and startup files. Check menu names in the exact board manual, then take a photo before restarting.");
                         Show(guide); next.Enabled = built;
                         if (guideFile != null && File.Exists(guideFile)) guide.Navigate(guideFile);
+                        else if (guide.Document == null) guide.Navigate("about:blank");
+                        else SyncGuideTheme();
                     }
                     break;
                 case 4:
@@ -362,9 +656,8 @@ namespace A1401
 
         void AskToUpdate(string have)
         {
-            if (MessageBox.Show(this, "This is 1401 " + have + ". 1401 " + mustUpdate + " is out, and it fixes problems that stop older " +
-                                "versions. 1401 has to update before it builds or writes anything.\r\n\r\nUpdate now?",
-                                "1401 - Update needed", MessageBoxButtons.OKCancel) == DialogResult.OK) UpdateApp();
+            if (MessageBox.Show(this, Loc.F("This is 1401 {0}. 1401 {1} is out, and it fixes problems that stop older versions. 1401 has to update before it builds or writes anything.\r\n\r\nUpdate now?", have, mustUpdate),
+                                Loc.T("1401 - Update needed"), MessageBoxButtons.OKCancel) == DialogResult.OK) UpdateApp();
         }
 
         async void OnNext()
@@ -382,7 +675,7 @@ namespace A1401
             if (page == 1 && !scanned)
             {
                 if (SystemChecks.UnderWine()) { Say(Loc.T(SystemChecks.WineMessage)); return; }
-                busy = true; next.Enabled = false; log.Clear();
+                busy = true; next.Enabled = false; log.Clear(); bar.Value = 0;
                 if (rechecking) Say(Loc.T("This PC restarted since it was checked; checking it again."));
                 scanRunId = Guid.NewGuid().ToString("N");
                 scanDir = ScanEvidence.RunDirectory(Engine.Work, scanRunId);
@@ -402,7 +695,7 @@ namespace A1401
             }
             if (page == 2 && !built)
             {
-                busy = true; next.Enabled = false; log.Clear();
+                busy = true; next.Enabled = false; log.Clear(); bar.Value = 0;
                 efiDir = Path.Combine(Engine.Work, "efi");
                 var rep = Path.Combine(scanDir, "Report.json"); var acpi = Path.Combine(scanDir, "ACPI");
                 var lines = new List<string>();
@@ -532,6 +825,7 @@ namespace A1401
                 if (net != null) foreach (var n in net) add(Loc.T("Network"), n.Key);
             }
             catch (Exception e) { Say(Loc.T("Could not read the report: ") + e.Message); }
+            facts.Invalidate();
         }
 
         string Self()
@@ -717,6 +1011,92 @@ namespace A1401
                    fixture.StartsWith("Package verification", StringComparison.Ordinal);
         }
 
+        internal bool VerifyM3Theme()
+        {
+            var savedScheme = Theme.CurrentScheme;
+            bool savedDark = Theme.IsDark;
+            var savedSeed = Theme.CustomSeed;
+            int savedPage = page;
+            try
+            {
+                if (!(bar is M3ProgressBar) || !(ocLink is M3LinkLabel) || !(firmwareLink is M3LinkLabel) ||
+                    !firmwareLink.IsChip || !(facts is M3ListView) || !facts.OwnerDraw ||
+                    !(osPick is M3ComboBox) || !(disks is M3ComboBox) ||
+                    osPick.DrawMode != DrawMode.OwnerDrawFixed || disks.DrawMode != DrawMode.OwnerDrawFixed)
+                    return false;
+
+                // Ensure settingsBtn is visible inside the header client bounds and named for vector icon rendering
+                if (settingsBtn.Name != "settingsBtn" || refresh.Name != "refreshBtn" ||
+                    !settingsBtn.Visible || !settingsBtn.Enabled ||
+                    settingsBtn.Left < 0 || settingsBtn.Right > head.ClientSize.Width)
+                    return false;
+
+                Theme.SetPalette("blue", true, null, false);
+                if (Theme.CurrentScheme != "blue" || !Theme.IsDark ||
+                    Theme.Primary != Color.FromArgb(0xA8, 0xC7, 0xFA) ||
+                    Theme.Btn != Color.FromArgb(0x1B, 0x6E, 0xF3) ||
+                    BackColor != Theme.Bg || note.BackColor != Theme.CardBg)
+                    return false;
+
+                using (var dlg = Theme.CreateSettingsDialog(this))
+                {
+                    if (dlg.Controls.Count < 8 || dlg.BackColor != Theme.Bg)
+                        return false;
+                    foreach (Control c in dlg.Controls)
+                    {
+                        var lbl = c as Label;
+                        if (lbl != null && lbl.UseMnemonic) return false;
+                    }
+                    using (var dlgBmp = new Bitmap(dlg.Width, dlg.Height))
+                    {
+                        dlg.DrawToBitmap(dlgBmp, new Rectangle(0, 0, dlg.Width, dlg.Height));
+                    }
+                }
+
+                // Verify all preset color schemes in both Dark and Light modes
+                foreach (var scheme in new[] { "blue", "teal", "green", "purple", "orange", "rose" })
+                {
+                    Theme.SetPalette(scheme, false, null, false);
+                    if (Theme.CurrentScheme != scheme || Theme.IsDark || BackColor != Theme.Bg ||
+                        stepPanels[page].BackColor != Theme.Bg || head.BackColor != Theme.Panel || note.BackColor != Theme.CardBg)
+                        return false;
+
+                    Theme.SetPalette(scheme, true, null, false);
+                    if (Theme.CurrentScheme != scheme || !Theme.IsDark || BackColor != Theme.Bg ||
+                        stepPanels[page].BackColor != Theme.Bg || head.BackColor != Theme.Panel || note.BackColor != Theme.CardBg)
+                        return false;
+                }
+
+                Theme.SetPalette("custom", true, Color.FromArgb(0x7C, 0x4D, 0xFF), false);
+                if (Theme.CurrentScheme != "custom" || !Theme.IsDark || Theme.CustomSeedHex != "#7c4dff" || BackColor != Theme.Bg)
+                    return false;
+
+                // Render and exercise layout/painting across all steps (without calling Go(4) which enumerates USB drives)
+                Theme.SetPalette("blue", true, null, false);
+                foreach (int s in new[] { 0, 1, 2, 3, 5 })
+                {
+                    Go(s);
+                    using (var bmp = new Bitmap(Width, Height))
+                    {
+                        DrawToBitmap(bmp, new Rectangle(0, 0, Width, Height));
+                    }
+                }
+                Theme.SetPalette("blue", false, null, false);
+                Go(0);
+                using (var bmpLight = new Bitmap(Width, Height))
+                {
+                    DrawToBitmap(bmpLight, new Rectangle(0, 0, Width, Height));
+                }
+
+                return true;
+            }
+            finally
+            {
+                Go(savedPage);
+                Theme.SetPalette(savedScheme, savedDark, savedSeed, false);
+            }
+        }
+
         // Executed only by the owned packaged GUI verification session. The fixture
         // exercises registered control handlers without scanning or writing a stick.
         internal string FirmwareVerificationPhase { get; private set; }
@@ -731,7 +1111,7 @@ namespace A1401
             string localGuide = Path.Combine(directory, "firmware.html");
             try
             {
-                File.WriteAllText(localGuide, "<!doctype html><html><head><title>Firmware prerequisite fixture</title></head><body><h1>Firmware prerequisites</h1><p>No settings changed.</p></body></html>");
+                File.WriteAllText(localGuide, "<!doctype html><html><head><meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\"><title>Firmware prerequisite fixture</title><script>window.setM3Theme=function(s,d,c){document.documentElement.setAttribute('data-m3-sync',s+':'+(d?'dark':'light')+':'+c);};</script></head><body><h1>Firmware prerequisites</h1><p>No settings changed.</p></body></html>");
                 FirmwareVerificationPhase = "missing_guide";
                 busy = false; scanned = true; built = written = false; showingPrerequisites = false; firmwareGuideFile = null;
                 Go(1);
@@ -743,7 +1123,7 @@ namespace A1401
                 ActivateFirmwareLinkForVerification();
                 if (page != 3 || !showingPrerequisites || prerequisiteReturnPage != 1 ||
                     // The checks below compare against Loc.T, not a literal: the same build has to pass with the UI in
-// English and in Chinese, and a literal here would report a false failure on one of them.
+                    // English and in Chinese, and a literal here would report a false failure on one of them.
                     title.Text != Loc.T("Firmware prerequisites") || next.Text != Loc.T("Return >") || !guide.Visible || !next.Enabled || built) return false;
                 var wait = Stopwatch.StartNew();
                 while (wait.ElapsedMilliseconds < 2500 && (guide.Url == null || guide.DocumentTitle != "Firmware prerequisite fixture"))
@@ -752,6 +1132,10 @@ namespace A1401
                 }
                 if (guide.Url == null || !guide.Url.IsFile || !string.Equals(guide.Url.LocalPath, localGuide, StringComparison.OrdinalIgnoreCase) ||
                     guide.DocumentTitle != "Firmware prerequisite fixture") return false;
+                SyncGuideTheme();
+                var htmlCollection = guide.Document != null ? guide.Document.GetElementsByTagName("html") : null;
+                var syncedAttr = (htmlCollection != null && htmlCollection.Count > 0) ? htmlCollection[0].GetAttribute("data-m3-sync") : "";
+                if (string.IsNullOrEmpty(syncedAttr) || !syncedAttr.StartsWith(Theme.CurrentScheme + ":", StringComparison.Ordinal)) return false;
                 FirmwareVerificationPhase = "scan_next_return";
                 next.PerformClick();
                 if (page != 1 || showingPrerequisites || built || written || !firmwareLink.Visible) return false;
@@ -993,15 +1377,23 @@ namespace A1401
             using (var f = new Form { AutoScaleDimensions = new SizeF(96F, 96F), AutoScaleMode = AutoScaleMode.Dpi,
                                       Text = Loc.T("1401 - sending the startup logs"), FormBorderStyle = FormBorderStyle.FixedDialog,
                                       MaximizeBox = false, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent,
-                                      ClientSize = new Size(520, 300), Font = Theme.Body })
+                                      ClientSize = new Size(520, 316), BackColor = Theme.Bg, ForeColor = Theme.Text, Font = Theme.Body })
             {
+                Theme.EnableDoubleBuffering(f);
                 f.SuspendLayout();
-                var msg = new Label { Text = text, Left = 14, Top = 12, Width = 492, Height = 150 };
+                var msg = new Label { Text = text, Left = 24, Top = 20, Width = 472, Height = 148, ForeColor = Theme.Text, BackColor = Theme.CardBg, UseMnemonic = false };
                 var q = new Label { Text = Loc.T("Optional: the last line on the screen when it stopped (for example \"PCI configuration begin\"):"),
-                                    Left = 14, Top = 168, Width = 492, Height = 34 };
-                var box = new TextBox { Left = 14, Top = 204, Width = 492, MaxLength = 300 };
-                var send = new Button { Text = Loc.T("Send"), DialogResult = DialogResult.OK, Left = 330, Top = 252, Width = 84 };
-                var cancel = new Button { Text = Loc.T("Cancel"), DialogResult = DialogResult.Cancel, Left = 422, Top = 252, Width = 84 };
+                                    Left = 24, Top = 184, Width = 472, Height = 34, ForeColor = Theme.Muted, BackColor = Theme.CardBg, UseMnemonic = false };
+                var box = new TextBox { Left = 24, Top = 222, Width = 472, MaxLength = 300, BackColor = Theme.SurfaceContainerHigh, ForeColor = Theme.Text, Font = Theme.Mono, BorderStyle = BorderStyle.FixedSingle };
+                var send = new Button { Text = Loc.T("Send"), DialogResult = DialogResult.OK, Left = 316, Top = 268, Width = 92, Height = 34 };
+                var cancel = new Button { Text = Loc.T("Cancel"), DialogResult = DialogResult.Cancel, Left = 416, Top = 268, Width = 92, Height = 34 };
+                Theme.Style(send, true);
+                Theme.Style(cancel, false);
+                f.Paint += (s, e) =>
+                {
+                    e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    Theme.DrawCard(e.Graphics, new Rectangle(12, 12, f.ClientSize.Width - 24, 244), 16);
+                };
                 f.Controls.AddRange(new Control[] { msg, q, box, send, cancel });
                 f.AcceptButton = send; f.CancelButton = cancel;
                 f.ResumeLayout(false); f.PerformLayout();

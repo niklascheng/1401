@@ -179,5 +179,28 @@ class FirmwareReview(unittest.TestCase):
         self.assertIn('if (page == 4 && !built) { Go(2); return; }', source)
         self.assertIn('next.Enabled = built;', source)
 
+    def test_guide_html_uses_m3_blue_tokens_and_host_sync_api(self):
+        steps = guide.build_prerequisite_guide(self.value, True)
+        page = guide.render_html(self.value, steps, mark=b'', prerequisites=True)
+        self.assertIn('--md-sys-color-primary: #a8c7fa;', page)
+        self.assertIn('--md-sys-color-button: #1b6ef3;', page)
+        self.assertIn('--md-sys-color-surface: #0f141c;', page)
+        self.assertIn('window.setM3Theme = function', page)
+        self.assertIn('window.getM3Theme = function', page)
+        self.assertIn('m3-theme-panel', page)
+        self.assertIn('m3-theme-btn', page)
+
+    def test_windows_gui_uses_m3_flclash_custom_rendering(self):
+        main_src = (ROOT / 'windows/App/MainForm.cs').read_text(encoding='utf-8')
+        theme_src = (ROOT / 'windows/App/Theme.cs').read_text(encoding='utf-8')
+        for token in ('M3LinkLabel', 'M3ProgressBar', 'PaintHeader', 'PaintNav', 'PaintFooter',
+                      'PaintStepCards', 'StyleComboBox', 'StyleCheckBox', 'StyleListView',
+                      'CreateSettingsDialog', 'VerifyM3Theme'):
+            self.assertIn(token, main_src)
+        for token in ('class M3LinkLabel', 'class M3ProgressBar', 'DrawVectorIcon', 'DrawCard',
+                      'StyleNavStep', 'StyleComboBox', 'StyleCheckBox', 'StyleListView',
+                      'CreateSettingsDialog', '0x0B57D0', '0x1B6EF3', '0xA8C7FA'):
+            self.assertIn(token, theme_src)
+
 
 if __name__ == '__main__': unittest.main()

@@ -201,7 +201,7 @@ post({ act: "scan" });
 
 document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => {
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === b));
-  ["drv", "usb", "crash"].forEach((t) => ($("t-" + t).hidden = t !== b.dataset.t));
+  ["drv", "usb", "crash", "settings"].forEach((t) => ($("t-" + t).hidden = t !== b.dataset.t));
   if (b.dataset.t !== "usb") post({ act: "usbStop" });
 }));
 const CONN = [[0, "USB 2 Type-A"], [3, "USB 3 Type-A"], [9, "USB-C (flips)"], [10, "USB-C (one way)"], [255, "Inside the case"]];
@@ -283,3 +283,193 @@ NM.on = (m) => {
   prevOn(m);
 };
 window.NM = NM;
+
+const M3_SCHEMES = ["blue", "teal", "green", "purple", "orange", "rose"];
+const M3_STATE = { scheme: "blue", dark: true, customHex: "#1b6ef3" };
+
+function hexToHsl(hex) {
+  const s = String(hex || "").replace(/^#/, "");
+  if (s.length !== 6) return [214, 0.85, 0.53];
+  const r = parseInt(s.slice(0, 2), 16) / 255;
+  const g = parseInt(s.slice(2, 4), 16) / 255;
+  const b = parseInt(s.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, sat = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+    else if (max === g) h = ((b - r) / d + 2) * 60;
+    else h = ((r - g) / d + 4) * 60;
+  }
+  return [h, sat, l];
+}
+
+function hslToHex(h, s, l) {
+  h = ((h % 360) + 360) % 360;
+  s = Math.max(0, Math.min(1, s));
+  l = Math.max(0, Math.min(1, l));
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r1 = 0, g1 = 0, b1 = 0;
+  if (h < 60) { r1 = c; g1 = x; }
+  else if (h < 120) { r1 = x; g1 = c; }
+  else if (h < 180) { g1 = c; b1 = x; }
+  else if (h < 240) { g1 = x; b1 = c; }
+  else if (h < 300) { r1 = x; b1 = c; }
+  else { r1 = c; b1 = x; }
+  const hex = (v) => { const n = Math.round((v + m) * 255).toString(16); return n.length < 2 ? "0" + n : n; };
+  return "#" + hex(r1) + hex(g1) + hex(b1);
+}
+
+const M3_PRESET_SEEDS = {
+  blue: "#1b6ef3",
+  teal: "#00838f",
+  green: "#1e8e3e",
+  purple: "#7c4dff",
+  orange: "#e65100",
+  rose: "#d81b60"
+};
+
+function computeM3Tokens(scheme, dark, customHex) {
+  if (scheme === "blue") {
+    return dark ? {
+      "--md-sys-color-surface": "#0f141c",
+      "--md-sys-color-surface-container-low": "#171c26",
+      "--md-sys-color-surface-container": "#1b202b",
+      "--md-sys-color-surface-container-high": "#252b37",
+      "--md-sys-color-outline-variant": "#414855",
+      "--md-sys-color-outline": "#8b92a0",
+      "--md-sys-color-primary": "#a8c7fa",
+      "--md-sys-color-on-primary": "#062e6f",
+      "--md-sys-color-primary-container": "#0842a0",
+      "--md-sys-color-on-primary-container": "#d3e3fd",
+      "--md-sys-color-secondary": "#7fcfff",
+      "--md-sys-color-on-surface": "#e2e7f0",
+      "--md-sys-color-on-surface-variant": "#b6bfd0",
+      "--md-sys-color-button": "#1b6ef3",
+      "--md-sys-color-on-button": "#ffffff"
+    } : {
+      "--md-sys-color-surface": "#f8f9ff",
+      "--md-sys-color-surface-container-low": "#f0f4fa",
+      "--md-sys-color-surface-container": "#eaeef6",
+      "--md-sys-color-surface-container-high": "#e2e7f0",
+      "--md-sys-color-outline-variant": "#c4c6d0",
+      "--md-sys-color-outline": "#74777f",
+      "--md-sys-color-primary": "#0b57d0",
+      "--md-sys-color-on-primary": "#ffffff",
+      "--md-sys-color-primary-container": "#d3e3fd",
+      "--md-sys-color-on-primary-container": "#041e49",
+      "--md-sys-color-secondary": "#00639b",
+      "--md-sys-color-on-surface": "#191c20",
+      "--md-sys-color-on-surface-variant": "#44474e",
+      "--md-sys-color-button": "#0b57d0",
+      "--md-sys-color-on-button": "#ffffff"
+    };
+  }
+  const seed = M3_PRESET_SEEDS[scheme] || customHex || "#1b6ef3";
+  const [h, s0] = hexToHsl(seed);
+  const ch = Math.max(0.48, Math.min(0.92, s0));
+  const ns = Math.min(0.18, ch * 0.22);
+  return dark ? {
+    "--md-sys-color-surface": hslToHex(h, ns, 0.08),
+    "--md-sys-color-surface-container-low": hslToHex(h, ns, 0.115),
+    "--md-sys-color-surface-container": hslToHex(h, ns, 0.14),
+    "--md-sys-color-surface-container-high": hslToHex(h, ns, 0.185),
+    "--md-sys-color-outline-variant": hslToHex(h, ns * 1.1, 0.28),
+    "--md-sys-color-outline": hslToHex(h, ns, 0.56),
+    "--md-sys-color-primary": hslToHex(h, Math.max(0.76, ch), 0.78),
+    "--md-sys-color-on-primary": hslToHex(h, Math.max(0.70, ch), 0.16),
+    "--md-sys-color-primary-container": hslToHex(h, Math.max(0.68, ch), 0.30),
+    "--md-sys-color-on-primary-container": hslToHex(h, Math.max(0.80, ch), 0.90),
+    "--md-sys-color-secondary": hslToHex((h + 18) % 360, Math.max(0.65, ch * 0.85), 0.74),
+    "--md-sys-color-on-surface": hslToHex(h, ns * 0.5, 0.91),
+    "--md-sys-color-on-surface-variant": hslToHex(h, ns * 0.7, 0.74),
+    "--md-sys-color-button": hslToHex(h, Math.max(0.72, ch), 0.48),
+    "--md-sys-color-on-button": "#ffffff"
+  } : {
+    "--md-sys-color-surface": hslToHex(h, ns * 0.6, 0.98),
+    "--md-sys-color-surface-container-low": hslToHex(h, ns * 0.75, 0.955),
+    "--md-sys-color-surface-container": hslToHex(h, ns * 0.85, 0.93),
+    "--md-sys-color-surface-container-high": hslToHex(h, ns * 0.9, 0.895),
+    "--md-sys-color-outline-variant": hslToHex(h, ns * 0.8, 0.78),
+    "--md-sys-color-outline": hslToHex(h, ns * 0.8, 0.46),
+    "--md-sys-color-primary": hslToHex(h, Math.max(0.72, ch), 0.40),
+    "--md-sys-color-on-primary": "#ffffff",
+    "--md-sys-color-primary-container": hslToHex(h, Math.max(0.75, ch), 0.90),
+    "--md-sys-color-on-primary-container": hslToHex(h, Math.max(0.75, ch), 0.14),
+    "--md-sys-color-secondary": hslToHex((h + 18) % 360, Math.max(0.65, ch * 0.85), 0.36),
+    "--md-sys-color-on-surface": hslToHex(h, ns, 0.12),
+    "--md-sys-color-on-surface-variant": hslToHex(h, ns, 0.30),
+    "--md-sys-color-button": hslToHex(h, Math.max(0.72, ch), 0.40),
+    "--md-sys-color-on-button": "#ffffff"
+  };
+}
+
+function applyM3Theme() {
+  const root = document.documentElement;
+  if (root && root.dataset) {
+    root.dataset.scheme = M3_STATE.scheme;
+    root.dataset.mode = M3_STATE.dark ? "dark" : "light";
+  }
+  if (root && root.style && typeof root.style.setProperty === "function") {
+    try {
+      const tokens = computeM3Tokens(M3_STATE.scheme, M3_STATE.dark, M3_STATE.customHex);
+      Object.keys(tokens).forEach((k) => root.style.setProperty(k, tokens[k]));
+    } catch (_) {}
+  }
+  M3_SCHEMES.forEach((sc) => {
+    const btn = $("m3-sc-" + sc);
+    if (btn && typeof btn.setAttribute === "function") btn.setAttribute("aria-pressed", M3_STATE.scheme === sc ? "true" : "false");
+  });
+  const custLbl = $("m3-sc-custom");
+  if (custLbl && typeof custLbl.setAttribute === "function") custLbl.setAttribute("aria-pressed", M3_STATE.scheme === "custom" ? "true" : "false");
+  const darkBtn = $("m3-mode-dark"), lightBtn = $("m3-mode-light");
+  if (darkBtn && typeof darkBtn.setAttribute === "function") darkBtn.setAttribute("aria-pressed", M3_STATE.dark ? "true" : "false");
+  if (lightBtn && typeof lightBtn.setAttribute === "function") lightBtn.setAttribute("aria-pressed", !M3_STATE.dark ? "true" : "false");
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem("1401-m3-theme", JSON.stringify(M3_STATE));
+  } catch (_) {}
+}
+
+try {
+  if (typeof localStorage !== "undefined") {
+    const raw = localStorage.getItem("1401-m3-theme");
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (saved && (M3_SCHEMES.includes(saved.scheme) || saved.scheme === "custom")) M3_STATE.scheme = saved.scheme;
+      if (saved && typeof saved.dark === "boolean") M3_STATE.dark = saved.dark;
+      if (saved && typeof saved.customHex === "string" && /^#[0-9a-fA-F]{6}$/.test(saved.customHex)) {
+        M3_STATE.customHex = saved.customHex;
+        $("m3-custom-color").value = saved.customHex;
+      }
+    }
+  }
+} catch (_) {}
+applyM3Theme();
+
+M3_SCHEMES.forEach((sc) => {
+  $("m3-sc-" + sc).onclick = () => { M3_STATE.scheme = sc; applyM3Theme(); };
+});
+function onCustomColorPick() {
+  const val = ($("m3-custom-color").value || "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+    M3_STATE.customHex = val;
+    M3_STATE.scheme = "custom";
+    applyM3Theme();
+  }
+}
+$("m3-custom-color").oninput = onCustomColorPick;
+$("m3-custom-color").onchange = onCustomColorPick;
+$("m3-mode-dark").onclick = () => { M3_STATE.dark = true; applyM3Theme(); };
+$("m3-mode-light").onclick = () => { M3_STATE.dark = false; applyM3Theme(); };
+$("m3-reset").onclick = () => {
+  M3_STATE.scheme = "blue";
+  M3_STATE.dark = true;
+  M3_STATE.customHex = "#1b6ef3";
+  $("m3-custom-color").value = "#1b6ef3";
+  applyM3Theme();
+};
+

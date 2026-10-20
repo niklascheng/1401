@@ -402,7 +402,8 @@ def app_html(report, steps, macos="", mark=None, uid="g", prerequisites=False):
     introduction = (loc.t("This local page reviews the selected report before any EFI build. It does not establish current firmware settings or driver support.") if prerequisites else
                     loc.t("Hi! The 1401 app wrote this page on this PC, just for this PC &mdash; the settings below follow your scan and EFI. Exact firmware menus and board revisions have not been verified. Go through the steps in order and take your time."))
     for i, st in enumerate(steps, 1):
-        side.append(f'<li><a class="nav" href="#{uid}-h{i}"><span class="n">{i}</span> <span class="t">{_inline(st.title)}</span></a>'
+        here_attr = html.escape(loc.t(" <-- you are here"), quote=True)
+        side.append(f'<li><a class="nav" href="#{uid}-h{i}" data-here="{here_attr}"><span class="n">{i}</span> <span class="t">{_inline(st.title)}</span></a>'
                     + (' <span class="star">*</span>' if st.blocker else "") + "</li>")
         body, ol = [], []
         for line in st.body:
@@ -428,7 +429,11 @@ def app_html(report, steps, macos="", mark=None, uid="g", prerequisites=False):
     plate = "".join(f"<tr><th>{a}</th><td>{_inline(b)}</td></tr>" for a, b in _pc(report, macos) if b)
     first = (loc.t(' The ones with a red <span class="star">*</span> come first, before you touch the BIOS.')
              if any(st.blocker for st in steps) else "")
-    return f'''<div class="app" id="{uid}">
+    step_tmpl = html.escape(loc.f("Step {} of {}", "{0}", "{1}"), quote=True)
+    all_tmpl = html.escape(loc.f("All {} steps", "{0}"), quote=True)
+    one_txt = html.escape(loc.t("Show one step at a time"), quote=True)
+    every_txt = html.escape(loc.t("Show all the steps on one page"), quote=True)
+    return f'''<div class="app" id="{uid}" data-step="{step_tmpl}" data-all="{all_tmpl}" data-one="{one_txt}" data-every="{every_txt}">
 <center class="top">
 <table class="logo" role="presentation" cellspacing="0" cellpadding="0"><tr><td>{img}</td><td class="word"><span class="nm">NullMoth</span> <span class="sy">Systems</span><br><span class="ig">{heading}</span>{context_suffix}</td></tr></table>
 </center>
@@ -468,7 +473,8 @@ def render_html(report, steps, macos="", mark=None, prerequisites=False):
         with open(os.path.join(HERE, "moth-mark.jpg"), "rb") as fh:
             mark = fh.read()
     css, js = assets()
-    return ('<!doctype html>\n<html lang="' + ("zh-CN" if loc.language() == "zh" else "en") + '"\n<head>\n<meta charset="utf-8">\n'
+    return ('<!doctype html>\n<html lang="' + ("zh-CN" if loc.language() == "zh" else "en") + '">\n<head>\n<meta charset="utf-8">\n'
+            '<meta http-equiv="X-UA-Compatible" content="IE=edge">\n'
             '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             f'<meta http-equiv="Content-Security-Policy" content="{CSP}">\n'
             '<meta name="color-scheme" content="dark">\n<title>' + _inline(loc.t("1401 Install Guide")) + '</title>\n'

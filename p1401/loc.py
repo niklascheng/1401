@@ -28,10 +28,13 @@ ZH = {
     "This guide is for:": "本指南适用于：",
     "Steps": "步骤",
     "Show all the steps on one page": "在一页中显示全部步骤",
+    "Show one step at a time": "每次只显示一步",
     "&lt; Back": "&lt; 返回",
     "Next &gt;": "下一步 &gt;",
     " steps": " 个步骤",
+    "All {} steps": "全部 {} 个步骤",
     "Step {} of {}": "第 {} 步，共 {} 步",
+    " <-- you are here": " <-- 当前位置",
     "Back to the top": "回到顶部",
     "Board": "主板",
     "Type": "类型",
@@ -252,12 +255,27 @@ ZH = {
     "F11": "F11",
     "F12": "F12",
     "F12 (turn on 'F12 Boot Menu' in the BIOS first)": "F12（需先在 BIOS 中开启 'F12 Boot Menu'）",
+
+    # --- Material Design 3 theme & settings ---
+    "Settings": "设置",
+    "Theme & Appearance": "主题与外观",
+    "Color palette": "主题色调",
+    "Appearance mode": "外观模式",
+    "Dark": "深色",
+    "Light": "浅色",
+    "Blue": "科技蓝",
+    "Teal": "青碧",
+    "Green": "翠绿",
+    "Purple": "靛紫",
+    "Orange": "琥珀橙",
+    "Rose": "珊瑚红",
+    "Custom": "自定义",
 }
 
 
 def language():
     """'zh' when Chinese is selected, otherwise 'en'. Mirrors Loc.cs."""
-    probe = _FORCED or os.environ.get("LANG", "") or ""
+    probe = _FORCED or os.environ.get("A1401_LANG", "") or os.environ.get("LANG", "") or ""
     return "zh" if probe.lower().startswith("zh") else "en"
 
 

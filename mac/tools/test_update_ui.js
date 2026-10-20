@@ -3,11 +3,28 @@ const vm = require('vm');
 const assert = require('assert');
 const elements = new Map();
 const sent = [];
+const rootProps = new Map();
+const rootDataset = {};
 function element(id) {
-  if (!elements.has(id)) elements.set(id, { hidden: false, disabled: false, value: '', textContent: '', innerHTML: '', options: [], classList: { toggle() {} }, insertAdjacentHTML() {}, querySelectorAll() { return [] } });
+  if (!elements.has(id)) elements.set(id, { hidden: false, disabled: false, value: '', textContent: '', innerHTML: '', options: [], attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k]; }, classList: { toggle() {} }, insertAdjacentHTML() {}, querySelectorAll() { return [] } });
   return elements.get(id);
 }
-const sandbox = {document: {getElementById: element, querySelectorAll() {return []}}, window: {webkit: {messageHandlers: {nm: {postMessage(m) {sent.push(m)}}}}}, confirm: () => true, setTimeout};
+const sandbox = {
+  document: {
+    documentElement: {
+      dataset: rootDataset,
+      style: {
+        setProperty(k, v) { rootProps.set(k, v); },
+        removeProperty(k) { rootProps.delete(k); }
+      }
+    },
+    getElementById: element,
+    querySelectorAll() { return []; }
+  },
+  window: { webkit: { messageHandlers: { nm: { postMessage(m) { sent.push(m); } } } } },
+  confirm: () => true,
+  setTimeout
+};
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(__dirname + '/../Resources/app.js', 'utf8'), sandbox);
 const event = (event, data) => sandbox.window.NM.on({event, data});
@@ -97,3 +114,26 @@ event('scan', fresh());
 assert.equal(element('go').disabled, false);
 assert.equal(element('go').textContent, 'Install the driver');
 console.log('Install button names the step that comes first, and reads plainly once it is ready.');
+
+// Material Design 3 (M3) default Blue theme, Settings customization, and CSP checks
+assert(html.includes("style-src 'self' 'unsafe-inline'"), 'CSP must permit dynamic M3 custom properties on root');
+assert.equal(rootDataset.scheme, 'blue');
+assert.equal(rootDataset.mode, 'dark');
+assert.equal(rootProps.get('--md-sys-color-primary'), '#a8c7fa');
+assert.equal(rootProps.get('--md-sys-color-button'), '#1b6ef3');
+assert.equal(rootProps.get('--md-sys-color-surface'), '#0f141c');
+element('m3-sc-teal').onclick();
+assert.equal(rootDataset.scheme, 'teal');
+assert.equal(element('m3-sc-teal').getAttribute('aria-pressed'), 'true');
+element('m3-mode-light').onclick();
+assert.equal(rootDataset.mode, 'light');
+element('m3-custom-color').value = '#7c4dff';
+element('m3-custom-color').oninput();
+assert.equal(rootDataset.scheme, 'custom');
+assert.equal(element('m3-sc-custom').getAttribute('aria-pressed'), 'true');
+assert.equal(rootProps.size, 15, 'All 15 M3 color tokens must be populated for custom color palette');
+element('m3-reset').onclick();
+assert.equal(rootDataset.scheme, 'blue');
+assert.equal(rootDataset.mode, 'dark');
+assert.equal(rootProps.get('--md-sys-color-button'), '#1b6ef3');
+console.log('Material Design 3 default Blue theme, preset palettes, custom 15-token color picker, and reset verified.');

@@ -64,6 +64,7 @@ namespace A1401
                         timer.Stop();
                         shown = form.Visible && form.IsHandleCreated && form.Controls.Count > 0;
                         result["support_notices_visible"] = (bool)result["support_notices_visible"] && form.VerifySupportNoticePresentation();
+                        result["m3_theme_verified"] = form.VerifyM3Theme();
                         result["firmware_prerequisite_navigation"] = form.VerifyFirmwarePrerequisiteNavigation();
                         result["firmware_navigation_fixture_phase"] = form.FirmwareVerificationPhase;
                         form.Close();
@@ -75,7 +76,8 @@ namespace A1401
                 }
                 result["window_shown_and_closed"] = shown;
                 result["ok"] = shown && (bool)result["engine_complete"] && (bool)result["closed_form_log_collection_guard"] &&
-                               (bool)result["support_notices_visible"] && (bool)result["fresh_upload_batches"] && (bool)result["scan_evidence_binding"] &&
+                               (bool)result["support_notices_visible"] && (bool)result["m3_theme_verified"] &&
+                               (bool)result["fresh_upload_batches"] && (bool)result["scan_evidence_binding"] &&
                                (bool)result["firmware_prerequisite_navigation"] && (bool)result["packaged_local_report_lifecycle"];
             }
             catch (Exception error)

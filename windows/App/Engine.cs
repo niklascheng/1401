@@ -134,6 +134,7 @@ namespace A1401
                     psi.EnvironmentVariables["PYTHONNOUSERSITE"] = "1";
                     psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
                     psi.EnvironmentVariables["PYTHONDONTWRITEBYTECODE"] = "1";
+                    psi.EnvironmentVariables["A1401_LANG"] = Loc.Language;
                     using (var p = new Process { StartInfo = psi })
                     {
                         p.OutputDataReceived += (s, e) => { if (e.Data != null) record(e.Data); };

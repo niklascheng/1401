@@ -36,6 +36,8 @@ namespace A1401
             { "Something went wrong? Scan for logs and send them", "出问题了？扫描日志并发送" },
             { "Update the NVIDIA driver (newest release, here and on your 1401 stick)", "更新 NVIDIA 驱动（最新版本，同时更新此处和你的 1401 启动盘）" },
             { "Built your own EFI? Check it (and fix it) with the same rules 1401 uses", "自己搭过 EFI？用 1401 相同的规则检查（并修复）" },
+            { "Update 1401 (this app)", "更新 1401（本应用）" },
+            { "Buy me a coffee", "请作者喝杯咖啡 (Buy me a coffee)" },
             { "Review firmware prerequisites", "查看固件前置条件" },
 
             // --- introduction ---
@@ -148,6 +150,14 @@ namespace A1401
               "\r\n\r\n未检测到已插入的 1401 启动盘；插入后再次运行本操作即可一并更新。" },
             { "The driver could not be updated:\r\n\r\n", "驱动更新失败：\r\n\r\n" },
             { "1401 - Update driver", "1401 - 更新驱动" },
+            { "1401 - Update", "1401 - 更新" },
+            { "1401 - Update needed", "1401 - 需要更新" },
+            { "1401 {0} is the newest version.", "1401 {0} 已是最新版本。" },
+            { "1401 could not update itself:\r\n\r\n", "1401 无法自动更新：\r\n\r\n" },
+            { "The downloaded 1401 has no 1401.exe; nothing was changed.", "下载的 1401 包中缺少 1401.exe；未改动任何内容。" },
+            { "1401 {0} is downloaded and checked. 1401 closes, updates itself and opens again.", "1401 {0} 已下载并校验完毕。1401 将关闭、自动完成更新并重新打开。" },
+            { "This is 1401 {0}. 1401 {1} is out, and it fixes problems that stop older versions. 1401 has to update before it builds or writes anything.\r\n\r\nUpdate now?",
+              "当前版本为 1401 {0}。新版本 1401 {1} 已发布，修复了会导致旧版本卡住的问题。在构建或写入之前必须先更新 1401。\r\n\r\n现在更新吗？" },
 
             // --- EFI doctor ---
             { "Select the drive or folder that holds your EFI folder", "选择包含 EFI 文件夹的驱动器或文件夹" },
@@ -208,6 +218,27 @@ namespace A1401
             { ", not USB", "，不是 USB" },
             { ": Windows runs from it", "：Windows 正从它启动" },
             { "bus ", "总线类型 " },
+
+            // --- Material Design 3 theme & settings ---
+            { "Settings", "设置" },
+            { "Theme & Appearance", "主题与外观" },
+            { "Customize the Material Design 3 color palette and surface mode.", "自定义 Material Design 3 主题色调与界面深浅模式。" },
+            { "Color palette", "主题色调" },
+            { "Appearance mode", "外观模式" },
+            { "Dark mode", "深色模式" },
+            { "Light mode", "浅色模式" },
+            { "Blue (Default)", "科技蓝（默认）" },
+            { "Teal", "青碧色" },
+            { "Green", "翠绿色" },
+            { "Purple", "靛紫色" },
+            { "Orange", "琥珀橙" },
+            { "Rose", "珊瑚红" },
+            { "Custom", "自定义" },
+            { "Custom color...", "自定义颜色..." },
+            { "Reset to default", "恢复默认" },
+            { "Component", "硬件类别" },
+            { "Detected Hardware", "检测到的设备" },
+            { "Step {0} of {1}", "步骤 {0} / {1}" },
         };
 
         static readonly string Forced = Environment.GetEnvironmentVariable("A1401_LANG");
